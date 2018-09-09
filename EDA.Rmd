@@ -1,0 +1,201 @@
+---
+title: "EDA Walkthrough"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Exploratory Data Analysis (EDA) refers to the critical process of performing initial investigations on data so as to discover patterns,to spot anomalies,to test hypothesis and to check assumptions with the help of summary statistics and graphical representations. [Source: https://towardsdatascience.com/exploratory-data-analysis-8fc1cb20fd15]
+
+## Loading libraries
+```{r lib load}
+load.libraries <- c('data.table', 'corrplot', 'ggplot2', 'e1071', 'dplyr' , 'gridExtra', 'scales')
+install.lib <- load.libraries[!load.libraries %in% installed.packages()]
+for(libs in install.lib) install.packages(libs, dependences = TRUE)
+sapply(load.libraries, require, character = TRUE)
+```
+
+
+
+## Importing and reading dataset
+
+```{r import}
+data <- read.csv("~/R/Github/Kaggle-Ames-Housing-Prices/data/train.csv")
+
+# Take a look at the first few rows of the data
+head(data)
+
+# Dimensions of data
+cat('Data has', dim(data)[1], 'rows and', dim(data)[2], 'columns.')
+
+# So, we have 1460 rows and 81 columns. There is one dependent variable (Sales Price) and 80 independent variables. 
+#We can observe that there are a lot of features in this dataset and we would require feature extraction technique. 
+
+# Now, let's observe the structure of the dataset
+str(data)
+
+# Variable segregation 
+
+#factor variables
+cat_var <- names(data)[which(sapply(data, is.factor))]
+#numeric variablesdata
+num_var <- names(data)[which(sapply(data, is.numeric))]
+
+# Summary of the dataset gives us important insights for numerical var
+summary(data[which(sapply(data, is.factor))])
+
+# Checking for NAs in the dataset
+colSums(sapply(data, is.na))
+
+# The percentage of data missing in train.
+sum(is.na(data)) / (nrow(data) *ncol(data))
+
+# Check for duplicated rows.
+cat("The number of duplicated rows are", nrow(data) - nrow(unique(data)))
+```
+ 
+## Visualizing missing values
+ 
+```{r missing_values}
+
+plot_Missing <- function(data_in, title = NULL){
+  temp_df <- as.data.frame(ifelse(is.na(data_in), 0, 1))
+  temp_df <- temp_df[,order(colSums(temp_df))]
+  data_temp <- expand.grid(list(x = 1:nrow(temp_df), y = colnames(temp_df)))
+  data_temp$m <- as.vector(as.matrix(temp_df))
+  data_temp <- data.frame(x = unlist(data_temp$x), y = unlist(data_temp$y), m = unlist(data_temp$m))
+  ggplot(data_temp) + geom_tile(aes(x=x, y=y, fill=factor(m))) + scale_fill_manual(values=c("white", "black"), name="Missing\n(0=Yes, 1=No)") + theme_light() + ylab("") + xlab("") + ggtitle(title)
+}
+
+
+plot_Missing(data[,colSums(is.na(data)) > 0])
+
+```
+ 
+## Plots for categorical variables
+
+```{r cat var desp}
+data_cat <- data[ ,which((names(data) %in% cat_var)==TRUE)]
+
+#fucntion for plotting Histograms
+plotHist <- function(data_in, i) {
+  data <- data.frame(x=data_in[[i]])
+  p <- ggplot(data=data, aes(x=factor(x))) + stat_count() + xlab(colnames(data_in)[i]) + theme_classic() + 
+    theme(axis.text.x = element_text(angle = 90, hjust =1))
+  return (p)
+}
+
+#arranging plots
+doPlots <- function(data_in, fun, ii, ncol=3) {
+  pp <- list()
+  for (i in ii) {
+    p <- fun(data_in=data_in, i=i)
+    pp <- c(pp, list(p))
+  }
+  do.call("grid.arrange", c(pp, ncol=ncol))
+}
+
+doPlots(data_cat, fun= plotHist, ii= 1:4, ncol =2 )
+
+doPlots(data_cat, fun= plotHist, ii= 5:8, ncol =2 )
+
+doPlots(data_cat, fun= plotHist, ii= 9:12, ncol =2 )
+
+doPlots(data_cat, fun= plotHist, ii= 13:16, ncol =2 )
+
+doPlots(data_cat, fun= plotHist, ii= 17:20, ncol =2 )
+
+doPlots(data_cat, fun= plotHist, ii= 21:24, ncol =2 )
+
+doPlots(data_cat, fun= plotHist, ii= 25:28, ncol =2 )
+```
+
+## Prices of sales in every Neighborhood
+
+```{r sales_pricesvsNeighborhood}
+
+#to avoid exponential notation
+options(scipen=5)
+
+ggplot(data,aes(Neighborhood, SalePrice)) + geom_boxplot() + theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) + xlab('Neighborhoods') + ylab('Sale Price')
+```
+
+
+## Plots for numerical variables
+
+```{r num var desp}
+
+data_num <- data[ ,which((names(data) %in% num_var)==TRUE)]
+
+#denisty plots for numerical variables
+plotDen <- function(data_in, i){
+  data <- data.frame(x=data_in[[i]], SalePrice = data_in$SalePrice)
+  p <- ggplot(data= data) + geom_line(aes(x = x), stat = 'density', size = 1,alpha = 1.0) +
+    xlab(paste0((colnames(data_in)[i]), '\n', 'Skewness: ',round(skewness(data_in[[i]], na.rm = TRUE), 2))) + theme_classic() 
+  return(p)
+   
+}
+
+doPlots(data_num, fun = plotDen, ii = 2:6, ncol = 2)
+
+doPlots(data_num, fun = plotDen, ii = 7:12, ncol = 2)
+
+doPlots(data_num, fun = plotDen, ii = 13:17, ncol = 2)
+```
+
+## Correaltion 
+
+Dark blue shades represents positive correlation while dark red shades represents negative correlation. After correlations plot we observe that the following variables are highly correlated to Sales price.
+
+OverallQual :  Rates the overall material and finish of the house : Factor with 10 levels 
+YearBuilt  : Original construction date : Discrete Numeric / Factor
+YearRemodAdd : Remodel date (same as construction date if no remodeling or additions) : Discrete Numeric / Factor
+TotalBsmtSF : Total square feet of basement area  : Numeric
+X1stFlrSF : First Floor square feet  : Numeric
+GrLivArea : Above grade (ground) living area square feet  : Numeric
+FullBath : Full bathrooms above grade  : Numeric / Factor
+TotRmsAbvGrd : Total rooms above grade (does not include bathrooms)  : Discrete Numeric / Factor
+GarageYrBlt :  Year garage was built  : Numeric
+GarageCars : Size of garage in car capacity  : Discrete Numeric / Factor 
+GarageArea : Size of garage in square feet : Numeric
+
+```{r corr plot}
+
+correlations <- cor(na.omit(data_num[,-1]))
+
+# correlations
+row_indic <- apply(correlations, 1, function(x) sum(x > 0.3 | x < -0.3) > 1)
+
+correlations<- correlations[row_indic ,row_indic ]
+corrplot(correlations, method="square")
+
+plotCorr <- function(data_in, i){
+  data <- data.frame(x = data_in[[i]], SalePrice = data_in$SalePrice)
+  p <- ggplot(data, aes(x = x, y = SalePrice)) + geom_point(shape = 1, na.rm = TRUE) + geom_smooth(method = lm ) + xlab(paste0(colnames(data_in)[i], '\n', 'R-Squared: ', round(cor(data_in[[i]], data$SalePrice, use = 'complete.obs'), 2))) + theme_classic() + ylab('Sales Price')
+  return(suppressWarnings(p))
+}
+
+
+high_corr <- c(names(correlations[,'SalePrice'])[which(correlations[,'SalePrice'] > 0.5)], names(correlations[,'SalePrice'])[which(correlations[,'SalePrice'] < -0.2)])
+
+cat("Highly correlated varaibles are",high_corr[-12])
+
+data_corr <- data[ ,which((names(data) %in% high_corr)==TRUE)]
+
+doPlots(data_corr, fun = plotCorr, ii = 1:6)
+
+doPlots(data_corr, fun = plotCorr, ii = 6:11)
+```
+
+## Normalization of Y
+
+```{r normal_sale_price}
+
+ggplot(data, aes(x= SalePrice)) + geom_histogram(col = 'white') + theme_classic()
+
+#normalized using log value
+ggplot(data, aes(x= log(SalePrice))) + geom_histogram(col = 'white') + theme_classic()
+```
